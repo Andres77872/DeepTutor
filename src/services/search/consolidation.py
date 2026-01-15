@@ -384,19 +384,18 @@ class AnswerConsolidator:
         # Build context with provider-specific fields
         context = self._build_provider_context(response)
         _logger.info(
-            f"[Consolidation] Context: {len(context.get('results', []))} results, "
+            f"Context: {len(context.get('results', []))} results, "
             f"{len(context.get('citations', []))} citations, max_results={context.get('max_results')}"
         )
         if context.get("results"):
             first_result = context["results"][0]
-            _logger.info(
-                f"[Consolidation] First result in context: title='{first_result.get('title', '')[:50]}', snippet='{first_result.get('snippet', '')[:100]}'..."
+            _logger.debug(
+                f"First result: title='{first_result.get('title', '')[:50]}', snippet='{first_result.get('snippet', '')[:100]}'..."
             )
 
         try:
             rendered = template.render(**context)
-            _logger.info(f"[Consolidation] Template rendered ({len(rendered)} chars)")
-            _logger.info(f"[Consolidation] Rendered content:\n{rendered}")
+            _logger.debug(f"Template rendered ({len(rendered)} chars)")
             return rendered
         except Exception as e:
             _logger.error(f"Template rendering failed: {e}")

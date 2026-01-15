@@ -287,8 +287,9 @@ cp .env.example .env
 | `FRONTEND_PORT` | No | Frontend port (default: `3782`) |
 | `NEXT_PUBLIC_API_BASE` | No | **Frontend API URL** - Set this for remote/LAN access (e.g., `http://192.168.1.100:8001`) |
 | `TTS_*` | No | Text-to-Speech settings |
-| `SEARCH_PROVIDER` | No | Search provider (options: `perplexity`, `tavily`, `serper`, `jina`, `exa`, `baidu`, default: `perplexity`) |
+| `SEARCH_PROVIDER` | No | Search provider (options: `perplexity`, `tavily`, `serper`, `jina`, `exa`, `baidu`, `searxng`, default: `perplexity`) |
 | `SEARCH_API_KEY` | No | Unified API key for all search providers |
+| `SEARCH_BASE_URL` | No | Base URL for self-hosted search providers (e.g., `http://localhost:8888` for SearXNG) |
 
 > 💡 **Remote Access**: If accessing from another device (e.g., `192.168.31.66:3782`), add to `.env`:
 > ```bash

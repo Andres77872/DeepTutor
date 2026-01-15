@@ -11,7 +11,7 @@ Features:
 - Self-hosted: Full control over search sources
 
 Configuration:
-- SEARXNG_BASE_URL: Base URL of SearXNG instance (default: http://localhost:8888)
+- SEARCH_BASE_URL: Base URL of SearXNG instance (default: http://localhost:8888)
 
 Note: JSON format must be enabled in SearXNG settings.yml:
     search:
@@ -20,8 +20,8 @@ Note: JSON format must be enabled in SearXNG settings.yml:
         - json
 """
 
-from datetime import datetime
 import os
+from datetime import datetime
 from typing import Any
 
 import requests
@@ -43,11 +43,12 @@ class SearXNGProvider(BaseSearchProvider):
 
     display_name = "SearXNG"
     description = "Privacy-focused metasearch engine"
-    api_key_env_var = "SEARXNG_BASE_URL"
     requires_api_key = False
     supports_answer = False
 
-    DEFAULT_BASE_URL = "http://192.168.1.90:8888"
+    DEFAULT_BASE_URL = "http://localhost:8888"
+    DEFAULT_ENGINES = "brave,bing,wikipedia,wikidata,wikinews"
+    DEFAULT_CATEGORIES = "general"
 
     def __init__(self, api_key: str | None = None, **kwargs: Any) -> None:
         """
@@ -59,11 +60,8 @@ class SearXNGProvider(BaseSearchProvider):
         """
         super().__init__(api_key=api_key, **kwargs)
         self.base_url = (
-            kwargs.get("base_url") or os.environ.get("SEARXNG_BASE_URL") or self.DEFAULT_BASE_URL
+            kwargs.get("base_url") or os.environ.get("SEARCH_BASE_URL") or self.DEFAULT_BASE_URL
         ).rstrip("/")
-
-    DEFAULT_ENGINES = "brave,bing,wikipedia,wikidata,wikinews"
-    DEFAULT_CATEGORIES = "general"
 
     def search(
         self,
@@ -99,8 +97,8 @@ class SearXNGProvider(BaseSearchProvider):
             categories or os.environ.get("SEARXNG_CATEGORIES") or self.DEFAULT_CATEGORIES
         )
         effective_language = None if not language or language == "auto" else language
-        self.logger.info(
-            f"[SearXNG] Request: base_url={self.base_url}, language={effective_language or 'auto'}, "
+        self.logger.debug(
+            f"Request: base_url={self.base_url}, language={effective_language or 'auto'}, "
             f"categories={effective_categories}, engines={effective_engines}"
         )
 
@@ -133,8 +131,8 @@ class SearXNGProvider(BaseSearchProvider):
         if effective_language:
             headers["Accept-Language"] = effective_language
 
-        self.logger.info(f"[SearXNG] Endpoint: {search_endpoint}")
-        self.logger.info(f"[SearXNG] Query params: {params}")
+        self.logger.debug(f"Endpoint: {search_endpoint}")
+        self.logger.debug(f"Query params: {params}")
 
         try:
             response = requests.get(
@@ -143,7 +141,7 @@ class SearXNGProvider(BaseSearchProvider):
                 headers=headers,
                 timeout=timeout,
             )
-            self.logger.info(f"[SearXNG] Request URL: {response.url}")
+            self.logger.debug(f"Request URL: {response.url}")
         except requests.exceptions.RequestException as e:
             self.logger.error(f"SearXNG request failed: {e}")
             raise SearXNGAPIError(f"SearXNG request failed: {e}") from e
@@ -164,35 +162,25 @@ class SearXNGProvider(BaseSearchProvider):
             self.logger.error(f"SearXNG API error: {response.status_code} - {response.text}")
             raise SearXNGAPIError(f"SearXNG API error: {response.status_code} - {response.text}")
 
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError as e:
+            self.logger.error(f"SearXNG returned invalid JSON: {e}")
+            raise SearXNGAPIError(f"SearXNG returned invalid JSON: {e}") from e
 
-        self.logger.info(f"[SearXNG] Response status: {response.status_code}")
-        self.logger.info(f"[SearXNG] Response keys: {list(data.keys())}")
-        self.logger.info(f"[SearXNG] Results count: {len(data.get('results', []))}")
-        self.logger.info(f"[SearXNG] Answers count: {len(data.get('answers', []))}")
-        self.logger.info(f"[SearXNG] Suggestions: {data.get('suggestions', [])}")
-        self.logger.info(f"[SearXNG] Corrections: {data.get('corrections', [])}")
-        self.logger.info(f"[SearXNG] Infoboxes count: {len(data.get('infoboxes', []))}")
+        self.logger.debug(f"Response status: {response.status_code}")
+        self.logger.debug(f"Results count: {len(data.get('results', []))}")
+        self.logger.debug(f"Answers count: {len(data.get('answers', []))}")
 
         unresponsive = data.get("unresponsive_engines", [])
         if unresponsive:
-            self.logger.warning(f"[SearXNG] Unresponsive engines: {unresponsive}")
+            self.logger.warning(f"Unresponsive engines: {unresponsive}")
 
-        if data.get("results"):
-            engine_counts: dict[str, int] = {}
-            for r in data["results"]:
-                eng = r.get("engine", "unknown")
-                engine_counts[eng] = engine_counts.get(eng, 0) + 1
-            self.logger.info(f"[SearXNG] Results by engine: {engine_counts}")
-            self.logger.info(f"[SearXNG] First result: {data['results'][0]}")
-        elif unresponsive:
+        if not data.get("results") and unresponsive:
             engine_errors = ", ".join([f"{e[0]}({e[1]})" for e in unresponsive])
-            self.logger.error(
-                f"[SearXNG] No results - all engines failed: {engine_errors}. "
-                "Configure working engines in SearXNG settings.yml (brave, bing, wikipedia, wikidata, arxiv)"
-            )
-        else:
-            self.logger.warning(f"[SearXNG] No results returned. Full response: {data}")
+            self.logger.warning(f"No results - engines failed: {engine_errors}")
+        elif not data.get("results"):
+            self.logger.debug("No results returned for query")
 
         citations: list[Citation] = []
         search_results: list[SearchResult] = []
@@ -237,7 +225,6 @@ class SearXNGProvider(BaseSearchProvider):
             )
 
         raw_answers = data.get("answers", [])
-        self.logger.info(f"[SearXNG] Raw answers: {raw_answers}")
 
         answer_texts = []
         for ans in raw_answers:
@@ -247,7 +234,6 @@ class SearXNGProvider(BaseSearchProvider):
                 answer_texts.append(ans["content"])
 
         answer = "\n\n".join(answer_texts) if answer_texts else ""
-        self.logger.info(f"[SearXNG] Parsed answer: {answer[:200] if answer else 'None'}")
 
         if not answer and search_results:
             answer = search_results[0].snippet
@@ -261,10 +247,7 @@ class SearXNGProvider(BaseSearchProvider):
             "corrections": data.get("corrections", []),
         }
 
-        self.logger.info(
-            f"[SearXNG] Final results: {len(search_results)} search_results, {len(citations)} citations"
-        )
-        self.logger.info(f"[SearXNG] Final answer length: {len(answer)} chars")
+        self.logger.info(f"Returned {len(search_results)} results for query: {query[:50]}")
 
         return WebSearchResponse(
             query=query,

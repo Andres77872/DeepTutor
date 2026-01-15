@@ -192,6 +192,10 @@ export default function ConfigForm({
           ? { use_env: getEnvVarForBaseUrl(configType) }
           : baseUrl;
         payload.model = model;
+      } else if (isSearchConfig && provider === "searxng") {
+        payload.base_url = useEnvBaseUrl
+          ? { use_env: "SEARCH_BASE_URL" }
+          : baseUrl;
       }
 
       if (showDimensions) {
